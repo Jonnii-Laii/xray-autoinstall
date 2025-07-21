@@ -4,7 +4,7 @@ set -e
 # 定义变量
 IP="2605:e440:4::53"
 PORT="443"
-UUID="bf6a59a0-7f9c-4465-a03f-b98c8fb41ae8"
+UUID="d33513b8-1d5c-4aee-8934-9d074867af74"
 
 # 安装 Xray 最新版本
 bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root
