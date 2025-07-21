@@ -42,10 +42,6 @@ cat > /usr/local/etc/xray/config.json << EOF
 }
 EOF
 
-
-# 应用内核参数
-sysctl -p
-
 # 创建 systemd 服务文件
 cat > /etc/systemd/system/xray.service <<EOF
 [Unit]
