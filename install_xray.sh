@@ -1,49 +1,41 @@
 #!/bin/bash
+set -e
 
-# 安装 Xray
-bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)
+# 定义变量
+IP="2605:e440:4::53"
+PORT="443"
+UUID="bf6a59a0-7f9c-4465-a03f-b98c8fb41ae8"
+
+# 安装 Xray 最新版本
+bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root
 
 # 创建配置目录
 mkdir -p /usr/local/etc/xray
-mkdir -p /etc/ssl/xray
 
-# 生成自签 TLS 证书（有效期10年）
-openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
-  -keyout /etc/ssl/xray/xray.key -out /etc/ssl/xray/xray.crt \
-  -subj "/CN=bing.com"
-
-# 创建 Xray 配置文件（VMess + TLS，监听 443 端口）
-cat > /usr/local/etc/xray/config.json <<EOF
+# 写入配置文件（无 TLS，指定 UUID、IP 和端口）
+cat > /usr/local/etc/xray/config.json << EOF
 {
   "log": {
+    "loglevel": "warning",
     "access": "/var/log/xray/access.log",
-    "error": "/var/log/xray/error.log",
-    "loglevel": "warning"
+    "error": "/var/log/xray/error.log"
   },
   "inbounds": [
     {
-      "port": 443,
+      "port": $PORT,
       "listen": "::",
       "protocol": "vmess",
       "settings": {
         "clients": [
           {
-            "id": "ba5c7e63-57b6-4511-a6ef-123456789abc",
+            "id": "$UUID",
             "alterId": 0
           }
         ]
       },
       "streamSettings": {
         "network": "tcp",
-        "security": "tls",
-        "tlsSettings": {
-          "certificates": [
-            {
-              "certificateFile": "/etc/ssl/xray/xray.crt",
-              "keyFile": "/etc/ssl/xray/xray.key"
-            }
-          ]
-        }
+        "security": "none"
       }
     }
   ],
@@ -55,7 +47,33 @@ cat > /usr/local/etc/xray/config.json <<EOF
 }
 EOF
 
-# 创建 systemd 服务文件（通常安装脚本已创建，以下仅供参考）
+# 系统内核参数优化
+cat >> /etc/sysctl.conf << EOF
+
+# 优化网络性能（通用优化）
+net.core.rmem_max = 4194304
+net.core.wmem_max = 4194304
+fs.file-max = 65536
+fs.nr_open = 65536
+net.netfilter.nf_conntrack_max = 16384
+
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.ip_local_port_range = 1024 65000
+
+# IPv6 优化参数
+net.ipv6.conf.all.forwarding = 1
+net.ipv6.conf.default.forwarding = 1
+net.ipv6.neigh.default.gc_thresh1 = 1024
+net.ipv6.neigh.default.gc_thresh2 = 2048
+net.ipv6.neigh.default.gc_thresh3 = 4096
+net.ipv6.icmp.ratelimit = 1000
+net.ipv6.route.flush = 1
+EOF
+
+# 应用内核参数
+sysctl -p
+
+# 创建 systemd 服务文件
 cat > /etc/systemd/system/xray.service <<EOF
 [Unit]
 Description=Xray Service
@@ -71,10 +89,34 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 EOF
 
-# 启动服务
+# 启动并设置开机自启
 systemctl daemon-reload
 systemctl enable xray
 systemctl restart xray
 
-# 显示服务状态
-systemctl status xray
+# 显示运行状态
+systemctl status xray --no-pager
+
+# ===== 生成 Shadowrocket vmess 导入链接 =====
+read -r -d '' vmess_json <<EOF
+{
+  "v": "2",
+  "ps": "Xray VMess",
+  "add": "$IP",
+  "port": "$PORT",
+  "id": "$UUID",
+  "aid": "0",
+  "net": "tcp",
+  "type": "none",
+  "host": "",
+  "path": "",
+  "tls": ""
+}
+EOF
+
+vmess_link="vmess://$(echo -n "$vmess_json" | base64 | tr -d '\n')"
+
+echo
+echo "==== Shadowrocket VMess 导入链接 ===="
+echo "$vmess_link"
+echo "==================================="
