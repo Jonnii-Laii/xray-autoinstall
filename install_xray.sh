@@ -47,33 +47,9 @@ cat > /usr/local/etc/xray/config.json << EOF
 }
 EOF
 
-# 系统内核参数优化
-cat >> /etc/sysctl.conf << EOF
-
-# 优化网络性能（通用优化）
-net.core.rmem_max = 4194304
-net.core.wmem_max = 4194304
-fs.file-max = 65536
-fs.nr_open = 65536
-net.netfilter.nf_conntrack_max = 16384
-
-net.ipv4.tcp_tw_reuse = 1
-net.ipv4.ip_local_port_range = 1024 65000
-
-# IPv6 优化参数
-net.ipv6.conf.all.forwarding = 1
-net.ipv6.conf.default.forwarding = 1
-net.ipv6.neigh.default.gc_thresh1 = 1024
-net.ipv6.neigh.default.gc_thresh2 = 2048
-net.ipv6.neigh.default.gc_thresh3 = 4096
-net.ipv6.icmp.ratelimit = 1000
-net.ipv6.route.flush = 1
-EOF
 
 # 应用内核参数
-set +e
 sysctl -p
-set -e
 
 # 创建 systemd 服务文件
 cat > /etc/systemd/system/xray.service <<EOF
