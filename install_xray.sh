@@ -71,7 +71,7 @@ net.ipv6.route.flush = 1
 EOF
 
 # 应用内核参数
-sysctl -p
+sysctl -p || true
 
 # 创建 systemd 服务文件
 cat > /etc/systemd/system/xray.service <<EOF
