@@ -18,13 +18,13 @@ cat > /usr/local/etc/xray/config.json << EOF
   },
   "inbounds": [
     {
-      "listen": "[::]:443",
+      "port": 443,
+      "listen": "::",
       "protocol": "vmess",
       "settings": {
         "clients": [
           {
-            "id": "d33513b8-1d5c-4aee-8934-9d074867af74",
-            "alterId": 0
+            "id": "d33513b8-1d5c-4aee-8934-9d074867af74"
           }
         ]
       },
