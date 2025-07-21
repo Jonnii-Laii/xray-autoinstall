@@ -2,10 +2,6 @@
 set -e
 
 # 定义变量
-IP="2605:e440:4::53"
-PORT="443"
-UUID="d33513b8-1d5c-4aee-8934-9d074867af74"
-
 # 安装 Xray 最新版本
 bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root
 
@@ -27,7 +23,7 @@ cat > /usr/local/etc/xray/config.json << EOF
       "settings": {
         "clients": [
           {
-            "id": "$UUID",
+            "id": "d33513b8-1d5c-4aee-8934-9d074867af74",
             "alterId": 0
           }
         ]
@@ -73,27 +69,3 @@ systemctl restart xray
 
 # 显示运行状态
 systemctl status xray --no-pager
-
-# ===== 生成 Shadowrocket vmess 导入链接 =====
-read -r -d '' vmess_json <<EOF
-{
-  "v": "2",
-  "ps": "Xray VMess",
-  "add": "$IP",
-  "port": "$PORT",
-  "id": "$UUID",
-  "aid": "0",
-  "net": "tcp",
-  "type": "none",
-  "host": "",
-  "path": "",
-  "tls": ""
-}
-EOF
-
-vmess_link="vmess://$(echo -n "$vmess_json" | base64 | tr -d '\n')"
-
-echo
-echo "==== Shadowrocket VMess 导入链接 ===="
-echo "$vmess_link"
-echo "==================================="
