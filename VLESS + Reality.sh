@@ -2,7 +2,7 @@
 set -e
 
 # ====== 1. 安装 Xray ======
-bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh) install -u root
+bash <(wget -qO- https://github.com/XTLS/Xray-install/raw/main/install-release.sh) install -u root
 
 # ====== 2. 生成 UUID 和 Reality 密钥 ======
 UUID=$(xray uuid)
