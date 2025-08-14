@@ -129,26 +129,26 @@ EOF
 
 # ==========================
 # 6) 开启内核网络优化（BBR / fq / fastopen）
-# ==========================
-# 设置参数前先检查是否存在
-for key in \
-    net.core.default_qdisc \
-    net.ipv4.tcp_congestion_control \
-    net.ipv4.tcp_fastopen \
-    net.core.rmem_max \
-    net.core.wmem_max
-do
-    if sysctl -a 2>/dev/null | grep -q "^${key}"; then
-        sysctl -w ${key}=$(case $key in
-            net.core.default_qdisc) echo fq ;;
-            net.ipv4.tcp_congestion_control) echo bbr ;;
-            net.ipv4.tcp_fastopen) echo 3 ;;
-            net.core.rmem_max|net.core.wmem_max) echo 8388608 ;;
-        esac)
-    fi
-done
+# 6) 开启内核网络优化（安全兼容版）
+# ========================== 
+echo "正在应用内核优化..."
 
-sysctl -p >/dev/null
+# 只设置现代内核支持的参数
+cat >> /etc/sysctl.conf << EOF
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+net.ipv4.tcp_fastopen=3
+net.core.rmem_max=8388608
+net.core.wmem_max=8388608
+net.ipv4.tcp_fin_timeout=30
+net.ipv4.tcp_keepalive_time=1200
+net.ipv4.tcp_syncookies=1
+net.ipv4.tcp_tw_reuse=1
+EOF
+
+# 应用更改
+sysctl -p >/dev/null 2>&1 || true
+
 
 # ==========================
 # 7) 开放防火墙（如有 ufw/iptables 自行调整）
