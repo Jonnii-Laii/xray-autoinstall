@@ -4,9 +4,9 @@ set -euo pipefail
 # ==========================
 # 可调参数（按需修改）
 # ==========================
-REALITY_DEST_DOMAIN="www.bing.com"             # 伪装/指向域名
+REALITY_DEST_DOMAIN="www.bilibili.com"             # 伪装/指向域名
 REALITY_DEST_PORT="443"                        # 目标站端口
-REALITY_SERVER_NAMES='["www.bing.com"]'        # ServerName 列表（JSON 数组）
+REALITY_SERVER_NAMES='["www.bilibili.com"]'        # ServerName 列表（JSON 数组）
 XRAY_PORT="443"                                # 本地监听端口
 GRPC_SERVICE_NAME="grpcReality"                # gRPC serviceName
 XRAY_USER="root"                               # 以 root 运行
@@ -128,27 +128,22 @@ WantedBy=multi-user.target
 EOF
 
 # ==========================
-# 6) 开启内核网络优化（BBR / fq / fastopen）
-# 6) 开启内核网络优化（安全兼容版）
-# ========================== 
-echo "正在应用内核优化..."
+# 6) 开启内核网络优化（仅设置有效参数）
+# ==========================
+declare -A KERNEL_PARAMS=(
+  ["net.core.default_qdisc"]="fq"
+  ["net.ipv4.tcp_congestion_control"]="bbr"
+  ["net.ipv4.tcp_fastopen"]="3"
+  ["net.core.rmem_max"]="8388608"
+  ["net.core.wmem_max"]="8388608"
+)
 
-# 只设置现代内核支持的参数
-cat >> /etc/sysctl.conf << EOF
-net.core.default_qdisc=fq
-net.ipv4.tcp_congestion_control=bbr
-net.ipv4.tcp_fastopen=3
-net.core.rmem_max=8388608
-net.core.wmem_max=8388608
-net.ipv4.tcp_fin_timeout=30
-net.ipv4.tcp_keepalive_time=1200
-net.ipv4.tcp_syncookies=1
-net.ipv4.tcp_tw_reuse=1
-EOF
-
-# 应用更改
-sysctl -p >/dev/null 2>&1 || true
-
+for param in "${!KERNEL_PARAMS[@]}"; do
+  if sysctl -a 2>/dev/null | grep -q "^${param}"; then
+    sysctl -w "${param}=${KERNEL_PARAMS[$param]}"
+    echo "${param}=${KERNEL_PARAMS[$param]}" >> /etc/sysctl.conf
+  fi
+done
 
 # ==========================
 # 7) 开放防火墙（如有 ufw/iptables 自行调整）
