@@ -130,11 +130,25 @@ EOF
 # ==========================
 # 6) 开启内核网络优化（BBR / fq / fastopen）
 # ==========================
-sysctl -w net.core.default_qdisc=fq >/dev/null
-sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null
-sysctl -w net.ipv4.tcp_fastopen=3 >/dev/null
-sysctl -w net.core.rmem_max=8388608 >/dev/null
-sysctl -w net.core.wmem_max=8388608 >/dev/null
+# 原本是直接 sysctl -w，现在改成判断存在再设置
+set_sysctl() {
+    key=$1
+    value=$2
+    if sysctl -a 2>/dev/null | grep -q "^${key}"; then
+        sysctl -w ${key}=${value} >/dev/null
+        if grep -q "^${key}=" /etc/sysctl.conf 2>/dev/null; then
+            sed -i "s/^${key}=.*/${key}=${value}/" /etc/sysctl.conf
+        else
+            echo "${key}=${value}" >> /etc/sysctl.conf
+        fi
+    fi
+}
+
+set_sysctl net.core.default_qdisc fq
+set_sysctl net.ipv4.tcp_congestion_control bbr
+set_sysctl net.ipv4.tcp_fastopen 3
+set_sysctl net.core.rmem_max 8388608
+set_sysctl net.core.wmem_max 8388608
 
 grep -q '^net.core.default_qdisc=' /etc/sysctl.conf 2>/dev/null && \
   sed -i 's/^net.core.default_qdisc=.*/net.core.default_qdisc=fq/' /etc/sysctl.conf || \
