@@ -130,44 +130,22 @@ EOF
 # ==========================
 # 6) 开启内核网络优化（BBR / fq / fastopen）
 # ==========================
-# 原本是直接 sysctl -w，现在改成判断存在再设置
-set_sysctl() {
-    key=$1
-    value=$2
+# 设置参数前先检查是否存在
+for key in \
+    net.core.default_qdisc \
+    net.ipv4.tcp_congestion_control \
+    net.ipv4.tcp_fastopen \
+    net.core.rmem_max \
+    net.core.wmem_max
+do
     if sysctl -a 2>/dev/null | grep -q "^${key}"; then
-        sysctl -w ${key}=${value} >/dev/null
-        if grep -q "^${key}=" /etc/sysctl.conf 2>/dev/null; then
-            sed -i "s/^${key}=.*/${key}=${value}/" /etc/sysctl.conf
-        else
-            echo "${key}=${value}" >> /etc/sysctl.conf
-        fi
+        sysctl -w ${key}=$(case $key in
+            net.core.default_qdisc) echo fq ;;
+            net.ipv4.tcp_congestion_control) echo bbr ;;
+            net.ipv4.tcp_fastopen) echo 3 ;;
+            net.core.rmem_max|net.core.wmem_max) echo 8388608 ;;
+        esac)
     fi
-}
-
-set_sysctl net.core.default_qdisc fq
-set_sysctl net.ipv4.tcp_congestion_control bbr
-set_sysctl net.ipv4.tcp_fastopen 3
-set_sysctl net.core.rmem_max 8388608
-set_sysctl net.core.wmem_max 8388608
-
-grep -q '^net.core.default_qdisc=' /etc/sysctl.conf 2>/dev/null && \
-  sed -i 's/^net.core.default_qdisc=.*/net.core.default_qdisc=fq/' /etc/sysctl.conf || \
-  echo 'net.core.default_qdisc=fq' >> /etc/sysctl.conf
-
-grep -q '^net.ipv4.tcp_congestion_control=' /etc/sysctl.conf 2>/dev/null && \
-  sed -i 's/^net.ipv4.tcp_congestion_control=.*/net.ipv4.tcp_congestion_control=bbr/' /etc/sysctl.conf || \
-  echo 'net.ipv4.tcp_congestion_control=bbr' >> /etc/sysctl.conf
-
-grep -q '^net.ipv4.tcp_fastopen=' /etc/sysctl.conf 2>/dev/null && \
-  sed -i 's/^net.ipv4.tcp_fastopen=.*/net.ipv4.tcp_fastopen=3/' /etc/sysctl.conf || \
-  echo 'net.ipv4.tcp_fastopen=3' >> /etc/sysctl.conf
-
-for key in net.core.rmem_max net.core.wmem_max; do
-  if grep -q "^$key=" /etc/sysctl.conf 2>/dev/null; then
-    sed -i "s/^$key=.*/$key=8388608/" /etc/sysctl.conf
-  else
-    echo "$key=8388608" >> /etc/sysctl.conf
-  fi
 done
 
 sysctl -p >/dev/null
