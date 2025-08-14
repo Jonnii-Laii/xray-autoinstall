@@ -1,186 +1,118 @@
 #!/bin/bash
-set -euo pipefail
+set -e
 
-# ==========================
-# 可调参数（按需修改）
-# ==========================
-REALITY_DEST_DOMAIN="www.bilibili.com"             # 伪装/指向域名
-REALITY_DEST_PORT="443"                        # 目标站端口
-REALITY_SERVER_NAMES='["www.bilibili.com"]'        # ServerName 列表（JSON 数组）
-XRAY_PORT="443"                                # 本地监听端口
-GRPC_SERVICE_NAME="grpcReality"                # gRPC serviceName
-XRAY_USER="root"                               # 以 root 运行
-LOGLEVEL="warning"                             # 日志等级
+# ====== 1. 安装 Xray ======
+bash <(wget -qO- https://github.com/XTLS/Xray-install/raw/main/install-release.sh) install -u root
 
-# ==========================
-# 1) 安装 Xray
-# ==========================
-bash <(wget -qO- https://github.com/XTLS/Xray-install/raw/main/install-release.sh) install -u "${XRAY_USER}"
+# ====== 2. 生成 UUID 和 Reality 密钥 ======
+UUID=$(xray uuid)
+KEY_PAIR=$(xray x25519)
+PRIVATE_KEY=$(echo "$KEY_PAIR" | grep 'Private key' | awk '{print $3}')
+PUBLIC_KEY=$(echo "$KEY_PAIR" | grep 'Public key' | awk '{print $3}')
+SHORT_ID=$(openssl rand -hex 4)
 
-# ==========================
-# 2) 生成 UUID & x25519 & shortId
-# ==========================
-UUID=$(/usr/local/bin/xray uuid)
-KEY_PAIR=$(/usr/local/bin/xray x25519)
-PRIVATE_KEY=$(echo "$KEY_PAIR" | awk '/Private key/{print $3}')
-PUBLIC_KEY=$(echo  "$KEY_PAIR" | awk '/Public key/{print $3}')
-SHORT_ID=$(openssl rand -hex 8)   # 8字节更通用
-
-# ==========================
-# 3) 创建目录
-# ==========================
+# ====== 3. 创建配置目录 ======
 mkdir -p /usr/local/etc/xray
 mkdir -p /var/log/xray
 
-# ==========================
-# 4) 写入 Xray 配置（Reality + gRPC + sockopt）
-# ==========================
+# ====== 4. 写入 Reality 配置 ======
 cat > /usr/local/etc/xray/config.json << EOF
 {
   "log": {
-    "loglevel": "${LOGLEVEL}",
+    "loglevel": "warning",
     "access": "/var/log/xray/access.log",
     "error": "/var/log/xray/error.log"
   },
   "inbounds": [
     {
-      "tag": "vless-reality-grpc",
-      "listen": "[::]",
-      "port": ${XRAY_PORT},
+      "port": 443,
+      "listen": "0.0.0.0",
       "protocol": "vless",
       "settings": {
-        "decryption": "none",
         "clients": [
           {
-            "id": "${UUID}",
+            "id": "$UUID",
             "flow": "xtls-rprx-vision"
           }
-        ]
+        ],
+        "decryption": "none"
       },
       "streamSettings": {
-        "network": "grpc",
+        "network": "tcp",
         "security": "reality",
         "realitySettings": {
           "show": false,
-          "dest": "${REALITY_DEST_DOMAIN}:${REALITY_DEST_PORT}",
+          "dest": "www.bing.com:443",
           "xver": 0,
-          "serverNames": ${REALITY_SERVER_NAMES},
-          "privateKey": "${PRIVATE_KEY}",
-          "shortIds": ["${SHORT_ID}"],
+          "serverNames": ["www.bing.com"],
+          "privateKey": "$PRIVATE_KEY",
+          "shortIds": ["$SHORT_ID"],
           "fingerprint": "chrome"
-        },
-        "grpcSettings": {
-          "serviceName": "${GRPC_SERVICE_NAME}",
-          "multiMode": true
-        },
-        "sockopt": {
-          "tcpFastOpen": true,
-          "tcpNoDelay": true
         }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["tls","http"]
       }
     }
   ],
   "outbounds": [
     {
-      "tag": "direct",
-      "protocol": "freedom",
-      "streamSettings": {
-        "sockopt": {
-          "tcpFastOpen": true,
-          "tcpNoDelay": true
-        }
-      }
-    },
-    {
-      "tag": "block",
-      "protocol": "blackhole",
-      "settings": {}
+      "protocol": "freedom"
     }
-  ],
-  "routing": {
-    "domainStrategy": "AsIs",
-    "rules": []
-  }
+  ]
 }
 EOF
 
-# ==========================
-# 5) systemd 服务
-# ==========================
+# ====== 5. 创建 systemd 服务 ======
 cat > /etc/systemd/system/xray.service <<EOF
 [Unit]
-Description=Xray Service (Reality+gRPC)
+Description=Xray Service
 After=network.target nss-lookup.target
 
 [Service]
-User=${XRAY_USER}
+User=root
 ExecStart=/usr/local/bin/xray run -config /usr/local/etc/xray/config.json
 Restart=always
-RestartSec=3
-LimitNOFILE=1048576
+LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# ==========================
-# 6) 开启内核网络优化（仅设置有效参数）
-# ==========================
-declare -A KERNEL_PARAMS=(
-  ["net.core.default_qdisc"]="fq"
-  ["net.ipv4.tcp_congestion_control"]="bbr"
-  ["net.ipv4.tcp_fastopen"]="3"
-  ["net.core.rmem_max"]="8388608"
-  ["net.core.wmem_max"]="8388608"
-)
-
-for param in "${!KERNEL_PARAMS[@]}"; do
-  if sysctl -a 2>/dev/null | grep -q "^${param}"; then
-    sysctl -w "${param}=${KERNEL_PARAMS[$param]}"
-    echo "${param}=${KERNEL_PARAMS[$param]}" >> /etc/sysctl.conf
-  fi
+echo "应用 TCP/IPv4 内核优化 (BBR + TCP FastOpen + 大缓冲区)..."
+for key in \
+    net.core.default_qdisc \
+    net.ipv4.tcp_congestion_control \
+    net.ipv4.tcp_fastopen \
+    net.core.rmem_max \
+    net.core.wmem_max \
+    net.ipv4.tcp_rmem \
+    net.ipv4.tcp_wmem
+do
+    if sysctl -a 2>/dev/null | grep -q "^${key}"; then
+        case $key in
+            net.core.default_qdisc) sysctl -w $key=fq ;;
+            net.ipv4.tcp_congestion_control) sysctl -w $key=bbr ;;
+            net.ipv4.tcp_fastopen) sysctl -w $key=3 ;;
+            net.core.rmem_max|net.core.wmem_max) sysctl -w $key=16777216 ;;
+            net.ipv4.tcp_rmem) sysctl -w $key="4096 87380 16777216" ;;
+            net.ipv4.tcp_wmem) sysctl -w $key="4096 65536 16777216" ;;
+        esac
+    fi
 done
 
-# ==========================
-# 7) 开放防火墙（如有 ufw/iptables 自行调整）
-# ==========================
-if command -v ufw >/dev/null 2>&1; then
-  ufw allow ${XRAY_PORT}/tcp || true
-fi
+sysctl -p 
 
-# ==========================
-# 8) 启动并自启
-# ==========================
+
+
+# ====== 6. 启动并开机自启 ======
 systemctl daemon-reload
 systemctl enable xray
 systemctl restart xray
 
-# ==========================
-# 9) 输出连接信息
-# ==========================
-SERVER_IPv4=$(curl -4s https://ipv4.ip.sb || true)
-SERVER_IPv6=$(curl -6s https://ipv6.ip.sb || true)
-
-echo -e "\n========= Reality + gRPC 配置 ========="
-echo "IPv4: ${SERVER_IPv4}"
-echo "IPv6: ${SERVER_IPv6}"
-echo "端口: ${XRAY_PORT}"
-echo "UUID: ${UUID}"
-echo "PublicKey: ${PUBLIC_KEY}"
-echo "ShortID: ${SHORT_ID}"
-echo "SNI: ${REALITY_DEST_DOMAIN}"
-echo "gRPC serviceName: ${GRPC_SERVICE_NAME}"
-
-if [[ -n "${SERVER_IPv4}" ]]; then
-  echo -e "\n客户端示例（IPv4）:"
-  echo "vless://${UUID}@${SERVER_IPv4}:${XRAY_PORT}?type=grpc&serviceName=${GRPC_SERVICE_NAME}&mode=gun&security=reality&sni=${REALITY_DEST_DOMAIN}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&encryption=none#Reality-gRPC-IPv4"
-fi
-if [[ -n "${SERVER_IPv6}" ]]; then
-  echo -e "\n客户端示例（IPv6）:"
-  echo "vless://${UUID}@[${SERVER_IPv6}]:${XRAY_PORT}?type=grpc&serviceName=${GRPC_SERVICE_NAME}&mode=gun&security=reality&sni=${REALITY_DEST_DOMAIN}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&encryption=none#Reality-gRPC-IPv6"
-fi
-echo -e "=======================================\n"
+# ====== 7. 输出连接信息 ======
+echo -e "\n===== Reality 配置信息 ====="
+echo "服务器IP: $(curl -s ipv4.ip.sb)"
+echo "UUID: $UUID"
+echo "PublicKey: $PUBLIC_KEY"
+echo "ShortID: $SHORT_ID"
+echo "伪装域名: www.bing.com"
+echo "端口: 443"
+echo -e "客户端示例（NekoBox 格式）：\nvless://$UUID@$(curl -s ipv4.ip.sb):443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality\n"
