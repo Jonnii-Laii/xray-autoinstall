@@ -18,7 +18,7 @@ mkdir -p /var/log/xray
 # ====== 4. 写入 Reality 配置 ======
 cat > /usr/local/etc/xray/config.json << EOF
 {
-  #客户端连接信息: vless://$UUID@$(curl -s ipv4.ip.sb):443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality_$SHORT_ID\n
+  #vless://$UUID@$(curl -s ipv4.ip.sb):443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality_$SHORT_ID
   "log": {
     "loglevel": "warning",
     "access": "/var/log/xray/access.log",
