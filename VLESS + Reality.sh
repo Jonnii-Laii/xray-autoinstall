@@ -13,13 +13,15 @@ bash <(wget -qO- https://github.com/XTLS/Xray-install/raw/main/install-release.s
 echo "🔑 生成 UUID 和 Reality 密钥..."
 UUID=$(xray uuid)
 
-# 使用更稳健的方式获取密钥
-KEY_PAIR=$(xray x25519)
+# ===== 尝试非交互模式生成密钥 =====
+KEY_PAIR=$(xray x25519 --yes 2>/dev/null || echo | xray x25519)
+
+# 提取 PrivateKey 和 PublicKey
 PRIVATE_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PrivateKey: ).*')
 PUBLIC_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PublicKey: ).*')
 SHORT_ID=$(openssl rand -hex 4)
 
-# 如果仍为空，直接报错
+# 检查是否成功生成
 if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
     echo "❌ Reality 密钥生成失败，请手动检查 xray x25519 输出"
     exit 1
