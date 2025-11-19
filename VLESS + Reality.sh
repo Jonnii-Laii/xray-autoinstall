@@ -92,7 +92,9 @@ chmod +x /tmp/xray/xray
 mv /tmp/xray/xray /usr/local/bin/xray
 
 echo "=== 🔑 强制生成 Reality 密钥 ==="
+mkdir -p /usr/local/etc/xray
 /usr/local/bin/xray x25519 > /usr/local/etc/xray/reality.keys
+
 EOF
 
     chmod +x /tmp/fix-xray.sh
