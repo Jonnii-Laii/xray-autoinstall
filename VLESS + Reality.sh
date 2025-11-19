@@ -12,10 +12,22 @@ bash <(wget -qO- https://github.com/XTLS/Xray-install/raw/main/install-release.s
 # ====== 2. 生成 UUID 和 Reality 密钥 ======
 echo "🔑 生成 UUID 和 Reality 密钥..."
 UUID=$(xray uuid)
+
+# 使用更稳健的方式获取密钥
 KEY_PAIR=$(xray x25519)
-PRIVATE_KEY=$(echo "$KEY_PAIR" | grep 'Private key' | awk '{print $3}')
-PUBLIC_KEY=$(echo "$KEY_PAIR" | grep 'Public key' | awk '{print $3}')
+PRIVATE_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PrivateKey: ).*')
+PUBLIC_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PublicKey: ).*')
 SHORT_ID=$(openssl rand -hex 4)
+
+# 如果仍为空，直接报错
+if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
+    echo "❌ Reality 密钥生成失败，请手动检查 xray x25519 输出"
+    exit 1
+fi
+
+echo "✅ Reality 密钥生成成功"
+echo "PrivateKey: $PRIVATE_KEY"
+echo "PublicKey: $PUBLIC_KEY"
 
 # ====== 3. 创建配置目录 ======
 mkdir -p /usr/local/etc/xray
