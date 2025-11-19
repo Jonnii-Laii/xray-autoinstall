@@ -9,32 +9,27 @@ echo "======================================"
 echo "🚀 安装官方 Xray..."
 bash <(wget -qO- https://github.com/XTLS/Xray-install/raw/main/install-release.sh) install -u root
 
-# ====== 2. 生成或读取 Reality 密钥 ======
-KEY_FILE="/root/reality.keys"
+# ====== 2. 生成 UUID 和 Reality 密钥 ======
+echo "🔑 生成 UUID 和 Reality 密钥..."
+UUID=$(xray uuid)
 
-if [ -f "$KEY_FILE" ]; then
-    echo "🔑 读取已存在的 Reality 密钥..."
-    source "$KEY_FILE"
-else
-    echo "🔑 生成 Reality 密钥..."
-    # 尝试非交互方式生成
-    KEY_PAIR=$(xray x25519 --yes 2>/dev/null || echo | xray x25519)
-    PRIVATE_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PrivateKey: ).*')
-    PUBLIC_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PublicKey: ).*')
+# 使用非交互模式生成密钥（管道方式避免交互）
+KEY_PAIR=$(echo | xray x25519 2>/dev/null)
 
-    if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
-        echo "❌ Reality 密钥生成失败，请手动检查 xray x25519 输出"
-        exit 1
-    fi
+# 提取密钥
+PRIVATE_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PrivateKey: ).*')
+PUBLIC_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PublicKey: ).*')
+SHORT_ID=$(openssl rand -hex 4)
 
-    echo "PRIVATE_KEY=$PRIVATE_KEY" > "$KEY_FILE"
-    echo "PUBLIC_KEY=$PUBLIC_KEY" >> "$KEY_FILE"
-    echo "✅ Reality 密钥已保存到 $KEY_FILE"
+# 检查密钥是否成功
+if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
+    echo "❌ Reality 密钥生成失败，请检查 xray 可执行文件"
+    exit 1
 fi
 
-# 生成 UUID 和短 ID
-UUID=$(xray uuid)
-SHORT_ID=$(openssl rand -hex 4)
+echo "✅ Reality 密钥生成成功"
+echo "PrivateKey: $PRIVATE_KEY"
+echo "PublicKey: $PUBLIC_KEY"
 
 # ====== 3. 创建配置目录 ======
 mkdir -p /usr/local/etc/xray
@@ -44,7 +39,6 @@ mkdir -p /var/log/xray
 SERVER_IP=$(curl -s ipv4.ip.sb)
 cat > /usr/local/etc/xray/config.json << EOF
 {
-  # vless://$UUID@$SERVER_IP:443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality_$SHORT_ID
   "log": {
     "loglevel": "warning",
     "access": "/var/log/xray/access.log",
@@ -86,7 +80,6 @@ cat > /usr/local/etc/xray/config.json << EOF
 EOF
 
 # ====== 5. 创建 systemd 服务 ======
-echo "⚙️ 创建 systemd 服务..."
 cat > /etc/systemd/system/xray.service <<EOF
 [Unit]
 Description=Xray Service
