@@ -18,16 +18,13 @@ echo "nameserver 8.8.8.8" >> /etc/resolv.conf
 # 1. 修复 APT
 #############################################
 echo "🔧 检查 APT 是否可用..."
-
 if ! apt update -y >/dev/null 2>&1; then
     echo "⚠️ APT 源不可用，切换到 Debian 官方源..."
-
     cat > /etc/apt/sources.list <<EOF
 deb http://deb.debian.org/debian bookworm main contrib non-free
 deb http://deb.debian.org/debian-security bookworm-security main contrib non-free
 deb http://deb.debian.org/debian bookworm-updates main contrib non-free
 EOF
-
     apt update -y
 fi
 
@@ -51,7 +48,6 @@ fi
 # 3. 安装官方 Xray
 #############################################
 echo "🚀 安装官方 Xray..."
-
 bash <(wget -qO- https://github.com/XTLS/Xray-install/raw/main/install-release.sh) install -u root
 
 if [ ! -f "$XRAY_BIN" ]; then
@@ -63,19 +59,16 @@ fi
 # 4. 生成 Reality 密钥
 #############################################
 echo "🔑 生成 Reality 密钥..."
-
 UUID=$($XRAY_BIN uuid)
 KEY_PAIR=$($XRAY_BIN x25519)
 
 PRIVATE_KEY=$(echo "$KEY_PAIR" | awk '/Private key/ {print $3}')
 PUBLIC_KEY=$(echo "$KEY_PAIR" | awk '/Public key/ {print $3}')
 
+# 🔄 若为空，执行增强修复流程
 if [ -z "$PUBLIC_KEY" ]; then
     echo "⚠️ Reality 密钥为空 → 自动触发增强修复脚本"
 
-    #############################################
-    # 🔥 自动执行增强版修复 + 纯净重装 + 强制生成密钥
-    #############################################
     cat << 'EOF' > /tmp/fix-xray.sh
 #!/bin/bash
 set -e
@@ -117,14 +110,12 @@ if [ -z "$PUBLIC_KEY" ]; then
 fi
 
 echo "🔐 Reality 密钥生成成功"
-
 SHORT_ID=$(openssl rand -hex 4)
 
 #############################################
 # 5. 写入 Xray 配置
 #############################################
 echo "📝 写入 Xray 配置..."
-
 mkdir -p /usr/local/etc/xray
 mkdir -p /var/log/xray
 
@@ -174,7 +165,6 @@ EOF
 # 6. systemd
 #############################################
 echo "⚙️ 创建 systemd 服务..."
-
 cat > /etc/systemd/system/xray.service <<EOF
 [Unit]
 Description=Xray Service
