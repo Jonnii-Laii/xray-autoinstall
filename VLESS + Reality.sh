@@ -1,10 +1,16 @@
 #!/bin/bash
 set -e
 
+echo "======================================"
+echo "     🚀 Xray Reality 一键安装脚本"
+echo "======================================"
+
 # ====== 1. 安装 Xray ======
+echo "🚀 安装官方 Xray..."
 bash <(wget -qO- https://github.com/XTLS/Xray-install/raw/main/install-release.sh) install -u root
 
 # ====== 2. 生成 UUID 和 Reality 密钥 ======
+echo "🔑 生成 UUID 和 Reality 密钥..."
 UUID=$(xray uuid)
 KEY_PAIR=$(xray x25519)
 PRIVATE_KEY=$(echo "$KEY_PAIR" | grep 'Private key' | awk '{print $3}')
@@ -16,9 +22,10 @@ mkdir -p /usr/local/etc/xray
 mkdir -p /var/log/xray
 
 # ====== 4. 写入 Reality 配置 ======
+SERVER_IP=$(curl -s ipv4.ip.sb)
 cat > /usr/local/etc/xray/config.json << EOF
 {
-  #vless://$UUID@$(curl -s ipv4.ip.sb):443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality_$SHORT_ID
+  # vless://$UUID@$SERVER_IP:443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality_$SHORT_ID
   "log": {
     "loglevel": "warning",
     "access": "/var/log/xray/access.log",
@@ -54,14 +61,13 @@ cat > /usr/local/etc/xray/config.json << EOF
     }
   ],
   "outbounds": [
-    {
-      "protocol": "freedom"
-    }
+    { "protocol": "freedom" }
   ]
 }
 EOF
 
 # ====== 5. 创建 systemd 服务 ======
+echo "⚙️ 创建 systemd 服务..."
 cat > /etc/systemd/system/xray.service <<EOF
 [Unit]
 Description=Xray Service
@@ -84,10 +90,11 @@ systemctl restart xray
 
 # ====== 7. 输出连接信息 ======
 echo -e "\n===== Reality 配置信息 ====="
-echo "服务器IP: $(curl -s ipv4.ip.sb)"
+echo "服务器IP: $SERVER_IP"
 echo "UUID: $UUID"
 echo "PublicKey: $PUBLIC_KEY"
 echo "ShortID: $SHORT_ID"
 echo "伪装域名: www.bing.com"
 echo "端口: 443"
-echo -e "客户端示例（NekoBox 格式）：\nvless://$UUID@$(curl -s ipv4.ip.sb):443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality\n"
+echo -e "客户端示例（NekoBox 格式）：\n\
+vless://$UUID@$SERVER_IP:443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality\n"
