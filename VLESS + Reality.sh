@@ -2,34 +2,39 @@
 set -e
 
 echo "======================================"
-echo "     🚀 Xray Reality 安装脚本"
+echo "     🚀 Xray Reality 一键安装脚本"
 echo "======================================"
 
 # ====== 1. 安装官方 Xray ======
 echo "🚀 安装官方 Xray..."
 bash <(wget -qO- https://github.com/XTLS/Xray-install/raw/main/install-release.sh) install -u root
 
-# ====== 2. 生成 UUID 和 Reality 密钥 ======
-echo "🔑 生成 UUID 和 Reality 密钥..."
-UUID=$(xray uuid)
+# ====== 2. 生成或读取 Reality 密钥 ======
+KEY_FILE="/root/reality.keys"
 
-# ===== 尝试非交互模式生成密钥 =====
-KEY_PAIR=$(xray x25519 --yes 2>/dev/null || echo | xray x25519)
+if [ -f "$KEY_FILE" ]; then
+    echo "🔑 读取已存在的 Reality 密钥..."
+    source "$KEY_FILE"
+else
+    echo "🔑 生成 Reality 密钥..."
+    # 尝试非交互方式生成
+    KEY_PAIR=$(xray x25519 --yes 2>/dev/null || echo | xray x25519)
+    PRIVATE_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PrivateKey: ).*')
+    PUBLIC_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PublicKey: ).*')
 
-# 提取 PrivateKey 和 PublicKey
-PRIVATE_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PrivateKey: ).*')
-PUBLIC_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PublicKey: ).*')
-SHORT_ID=$(openssl rand -hex 4)
+    if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
+        echo "❌ Reality 密钥生成失败，请手动检查 xray x25519 输出"
+        exit 1
+    fi
 
-# 检查是否成功生成
-if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
-    echo "❌ Reality 密钥生成失败，请手动检查 xray x25519 输出"
-    exit 1
+    echo "PRIVATE_KEY=$PRIVATE_KEY" > "$KEY_FILE"
+    echo "PUBLIC_KEY=$PUBLIC_KEY" >> "$KEY_FILE"
+    echo "✅ Reality 密钥已保存到 $KEY_FILE"
 fi
 
-echo "✅ Reality 密钥生成成功"
-echo "PrivateKey: $PRIVATE_KEY"
-echo "PublicKey: $PUBLIC_KEY"
+# 生成 UUID 和短 ID
+UUID=$(xray uuid)
+SHORT_ID=$(openssl rand -hex 4)
 
 # ====== 3. 创建配置目录 ======
 mkdir -p /usr/local/etc/xray
@@ -112,3 +117,5 @@ echo "伪装域名: www.bing.com"
 echo "端口: 443"
 echo -e "客户端示例（NekoBox 格式）：\n\
 vless://$UUID@$SERVER_IP:443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality\n"
+
+echo "✅ Xray Reality 安装完成"
