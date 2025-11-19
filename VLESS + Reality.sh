@@ -1,44 +1,24 @@
 #!/bin/bash
 set -e
 
-echo "======================================"
-echo "     🚀 Xray Reality 一键安装脚本"
-echo "======================================"
-
-# ====== 1. 安装官方 Xray ======
-echo "🚀 安装官方 Xray..."
+# ====== 1. 安装 Xray ======
 bash <(wget -qO- https://github.com/XTLS/Xray-install/raw/main/install-release.sh) install -u root
 
 # ====== 2. 生成 UUID 和 Reality 密钥 ======
-echo "🔑 生成 UUID 和 Reality 密钥..."
 UUID=$(xray uuid)
-
-# 使用非交互模式生成密钥（管道方式避免交互）
-KEY_PAIR=$(echo | xray x25519 2>/dev/null)
-
-# 提取密钥
-PRIVATE_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PrivateKey: ).*')
-PUBLIC_KEY=$(echo "$KEY_PAIR" | grep -Po '(?<=PublicKey: ).*')
+KEY_PAIR=$(xray x25519)
+PRIVATE_KEY=$(echo "$KEY_PAIR" | grep 'Private key' | awk '{print $3}')
+PUBLIC_KEY=$(echo "$KEY_PAIR" | grep 'Public key' | awk '{print $3}')
 SHORT_ID=$(openssl rand -hex 4)
-
-# 检查密钥是否成功
-if [ -z "$PRIVATE_KEY" ] || [ -z "$PUBLIC_KEY" ]; then
-    echo "❌ Reality 密钥生成失败，请检查 xray 可执行文件"
-    exit 1
-fi
-
-echo "✅ Reality 密钥生成成功"
-echo "PrivateKey: $PRIVATE_KEY"
-echo "PublicKey: $PUBLIC_KEY"
 
 # ====== 3. 创建配置目录 ======
 mkdir -p /usr/local/etc/xray
 mkdir -p /var/log/xray
 
 # ====== 4. 写入 Reality 配置 ======
-SERVER_IP=$(curl -s ipv4.ip.sb)
 cat > /usr/local/etc/xray/config.json << EOF
 {
+  #vless://$UUID@$(curl -s ipv4.ip.sb):443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality_$SHORT_ID
   "log": {
     "loglevel": "warning",
     "access": "/var/log/xray/access.log",
@@ -74,7 +54,9 @@ cat > /usr/local/etc/xray/config.json << EOF
     }
   ],
   "outbounds": [
-    { "protocol": "freedom" }
+    {
+      "protocol": "freedom"
+    }
   ]
 }
 EOF
@@ -102,13 +84,10 @@ systemctl restart xray
 
 # ====== 7. 输出连接信息 ======
 echo -e "\n===== Reality 配置信息 ====="
-echo "服务器IP: $SERVER_IP"
+echo "服务器IP: $(curl -s ipv4.ip.sb)"
 echo "UUID: $UUID"
 echo "PublicKey: $PUBLIC_KEY"
 echo "ShortID: $SHORT_ID"
 echo "伪装域名: www.bing.com"
 echo "端口: 443"
-echo -e "客户端示例（NekoBox 格式）：\n\
-vless://$UUID@$SERVER_IP:443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality\n"
-
-echo "✅ Xray Reality 安装完成"
+echo -e "客户端示例（NekoBox 格式）：\nvless://$UUID@$(curl -s ipv4.ip.sb):443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality\n"
