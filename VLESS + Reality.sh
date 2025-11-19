@@ -5,12 +5,18 @@ echo "======================================"
 echo "     🚀 Xray Reality 一键安装脚本"
 echo "======================================"
 
-# ------------------ 0. 修复 DNS ------------------
+XRAY_BIN="/usr/local/bin/xray"
+
+#############################################
+# 0. 修复 DNS
+#############################################
 echo "🔧 修复 DNS..."
 echo "nameserver 1.1.1.1" > /etc/resolv.conf
 echo "nameserver 8.8.8.8" >> /etc/resolv.conf
 
-# ------------------ 1. 修复 APT 源 ------------------
+#############################################
+# 1. 修复 APT
+#############################################
 echo "🔧 检查 APT 是否可用..."
 
 if ! apt update -y >/dev/null 2>&1; then
@@ -25,9 +31,11 @@ EOF
     apt update -y
 fi
 
-apt install -y curl wget unzip openssl sudo >/dev/null 2>&1
+apt install -y curl wget unzip openssl ca-certificates sudo >/dev/null 2>&1
 
-# ------------------ 2. 卸载 Debian xray-core ------------------
+#############################################
+# 2. 卸载 Debian 自带 xray-core
+#############################################
 if dpkg -l | grep -q xray-core; then
     echo "⚠️ 检测到 Debian xray-core，正在卸载..."
     apt remove -y xray-core
@@ -39,19 +47,21 @@ if [ -f "/usr/bin/xray" ]; then
     rm -f /usr/bin/xray
 fi
 
-# ------------------ 3. 安装官方 Xray ------------------
+#############################################
+# 3. 安装官方 Xray
+#############################################
 echo "🚀 安装官方 Xray..."
 
 bash <(wget -qO- https://github.com/XTLS/Xray-install/raw/main/install-release.sh) install -u root
-
-XRAY_BIN="/usr/local/bin/xray"
 
 if [ ! -f "$XRAY_BIN" ]; then
     echo "❌ Xray 安装失败，请检查网络"
     exit 1
 fi
 
-# ------------------ 4. 生成 Reality 密钥 ------------------
+#############################################
+# 4. 生成 Reality 密钥
+#############################################
 echo "🔑 生成 Reality 密钥..."
 
 UUID=$($XRAY_BIN uuid)
@@ -60,22 +70,59 @@ KEY_PAIR=$($XRAY_BIN x25519)
 PRIVATE_KEY=$(echo "$KEY_PAIR" | awk '/Private key/ {print $3}')
 PUBLIC_KEY=$(echo "$KEY_PAIR" | awk '/Public key/ {print $3}')
 
-# 🔄 若为空重试
 if [ -z "$PUBLIC_KEY" ]; then
-    echo "⚠️ PublicKey 为空，正在重试..."
-    KEY_PAIR=$($XRAY_BIN x25519)
-    PRIVATE_KEY=$(echo "$KEY_PAIR" | awk '/Private key/ {print $3}')
-    PUBLIC_KEY=$(echo "$KEY_PAIR" | awk '/Public key/ {print $3}')
+    echo "⚠️ Reality 密钥为空 → 自动触发增强修复脚本"
+
+    #############################################
+    # 🔥 自动执行增强版修复 + 纯净重装 + 强制生成密钥
+    #############################################
+    cat << 'EOF' > /tmp/fix-xray.sh
+#!/bin/bash
+set -e
+
+echo "=== 🔥 彻底清理旧 Xray ==="
+systemctl stop xray 2>/dev/null || true
+systemctl disable xray 2>/dev/null || true
+rm -rf /usr/local/bin/xray
+rm -rf /usr/local/etc/xray
+rm -rf /etc/systemd/system/xray.service
+
+echo "=== 🔧 修复系统环境 ==="
+apt update -y
+apt install -y curl wget unzip openssl ca-certificates
+
+echo "=== 📥 下载最新版 Xray ==="
+LATEST=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep tag_name | cut -d '"' -f 4)
+wget -O /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/$LATEST/Xray-linux-64.zip
+unzip -o /tmp/xray.zip -d /tmp/xray
+chmod +x /tmp/xray/xray
+mv /tmp/xray/xray /usr/local/bin/xray
+
+echo "=== 🔑 强制生成 Reality 密钥 ==="
+/usr/local/bin/xray x25519 > /usr/local/etc/xray/reality.keys
+EOF
+
+    chmod +x /tmp/fix-xray.sh
+    bash /tmp/fix-xray.sh
+
+    # 重新读取密钥
+    KEY_PAIR=$(cat /usr/local/etc/xray/reality.keys)
+    PRIVATE_KEY=$(echo "$KEY_PAIR" | awk '/Private/ {print $3}')
+    PUBLIC_KEY=$(echo "$KEY_PAIR" | awk '/Public/ {print $3}')
 fi
 
 if [ -z "$PUBLIC_KEY" ]; then
-    echo "❌ Reality 密钥生成失败"
+    echo "❌ 仍然无法生成 Reality 密钥（可能是 OpenVZ 或 CPU 不支持）"
     exit 1
 fi
 
+echo "🔐 Reality 密钥生成成功"
+
 SHORT_ID=$(openssl rand -hex 4)
 
-# ------------------ 5. 配置 Xray ------------------
+#############################################
+# 5. 写入 Xray 配置
+#############################################
 echo "📝 写入 Xray 配置..."
 
 mkdir -p /usr/local/etc/xray
@@ -123,7 +170,9 @@ cat > /usr/local/etc/xray/config.json << EOF
 }
 EOF
 
-# ------------------ 6. systemd 服务 ------------------
+#############################################
+# 6. systemd
+#############################################
 echo "⚙️ 创建 systemd 服务..."
 
 cat > /etc/systemd/system/xray.service <<EOF
@@ -145,7 +194,9 @@ systemctl daemon-reload
 systemctl enable xray
 systemctl restart xray
 
-# ------------------ 7. 输出连接信息 ------------------
+#############################################
+# 7. 输出信息
+#############################################
 SERVER_IP=$(curl -s ipv4.ip.sb)
 
 echo
@@ -160,5 +211,5 @@ echo "ShortID: $SHORT_ID"
 echo
 echo "📌 NekoBox / Shadowrocket 链接："
 echo "vless://$UUID@$SERVER_IP:443?encryption=none&security=reality&flow=xtls-rprx-vision&sni=www.bing.com&fp=chrome&pbk=$PUBLIC_KEY&sid=$SHORT_ID&type=tcp#Reality"
-echo
+echo 
 echo "======================================"
