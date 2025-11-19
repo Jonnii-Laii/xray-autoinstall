@@ -85,8 +85,11 @@ apt update -y
 apt install -y curl wget unzip openssl ca-certificates
 
 echo "=== 📥 下载最新版 Xray ==="
-LATEST=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep tag_name | cut -d '"' -f 4)
-wget -O /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/$LATEST/Xray-linux-64.zip
+LATEST=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name":' | head -1 | cut -d '"' -f 4)
+DOWNLOAD_URL="https://github.com/XTLS/Xray-core/releases/download/$LATEST/Xray-linux-64.zip"
+
+wget -O /tmp/xray.zip "$DOWNLOAD_URL"
+
 unzip -o /tmp/xray.zip -d /tmp/xray
 chmod +x /tmp/xray/xray
 mv /tmp/xray/xray /usr/local/bin/xray
